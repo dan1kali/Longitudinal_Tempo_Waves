@@ -22,4 +22,4 @@ __pycache__/
 .python-version
 
 # Pip/Poetry/uv files
-*.lock
+.lock
