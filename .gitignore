@@ -8,3 +8,18 @@ wheels/
 
 # Virtual environments
 .venv
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+.python-version
+
+# Pip/Poetry/uv files
+*.lock
