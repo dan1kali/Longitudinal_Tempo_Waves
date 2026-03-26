@@ -1,0 +1,24 @@
+[project]
+name = "longitudinal-tempo-waves"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "dan1kali", email = "dl74@rice.edu" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.2.6",
+    "scipy>=1.15.3",
+]
+
+[project.scripts]
+longitudinal-tempo-waves = "longitudinal_tempo_waves:main"
+
+[build-system]
+requires = ["uv_build>=0.11.1,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.setuptools.packages.find]
+where = ["src"]
