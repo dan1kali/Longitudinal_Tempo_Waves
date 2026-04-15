@@ -42,11 +42,11 @@ def TRCtoFIF(eegFileList, fifFileList, saveFIF=True):
         patientID = os.path.basename(os.path.dirname(eegFilePath))
         
         if os.path.exists(fifFilePath):
-            print("Skipping, already exists:", patientID, ' - ', fileName,'\n')
+            print(f"Skipping, already exists: {patientID} - {fileName}")
             continue
         else:
             os.makedirs(os.path.dirname(fifFilePath), exist_ok=True)
-            print('\n',"Processing:", patientID, ' - ', fileName,'\n')
+            print(f'\nProcessing: {patientID} - {fileName}')
 
         raw = create_mne_from_mixed_micromed_recording(eegFilePath)
         # raw.load_data()
@@ -55,7 +55,7 @@ def TRCtoFIF(eegFileList, fifFileList, saveFIF=True):
         
         if saveFIF:
             raw.save(fifFilePath, overwrite=True)
-            print('\n',"Saved ", patientID, ' - ', fileName," as .fif!",'\n')
+            print(f'Saved {patientID} - {fileName} as .fif!')
             
         # print("Number of channels:", len(fifFile.info['ch_names']),'\n\n')
         # print("Channel names:", fifFile.info['ch_names'], '\n\n')
@@ -63,9 +63,16 @@ def TRCtoFIF(eegFileList, fifFileList, saveFIF=True):
         # total_time_sec = fifFile.n_times / fifFile.info['sfreq']
         # print(f"Total time: {int(total_time_sec // 60)}m {int(total_time_sec % 60)}s", '\n\n')
 
-def removeBadChannels(fifFileList, channelsToRemove, replaceCleaned=False):
+def uniqueChannels(fifFileList):
+    unique_chans = set()
+    for file in fifFileList:
+        raw = mne.io.read_raw_fif(file, preload=False)
+        unique_chans.update(raw.info['ch_names'])
+    return natsorted(unique_chans)
+
+def removeBadChannels(fifFileList, channelsToRemove, badChanPrefixes=[], badChanSuffixes=[], replaceCleaned=False):
     """
-    Removes bad channels from FIF files and saves to a mirrored directory where 'fif' is replaced with 'fif_rm_chans'
+    Removes bad channels from .fif files and saves to a directory called 'fif_rm_chans'
 
     Parameters
     ----------
@@ -73,7 +80,10 @@ def removeBadChannels(fifFileList, channelsToRemove, replaceCleaned=False):
         Paths to input .fif files
     bad_channel_list : list of str
         List of channel names to remove
+    badChanPrefixes : list of str, optional
+        List of prefixes for channels to remove
     """
+
     if not isinstance(fifFileList, list):
         fifFileList = [fifFileList]
 
@@ -85,6 +95,12 @@ def removeBadChannels(fifFileList, channelsToRemove, replaceCleaned=False):
 
             # Remove bad channels
             existing_bad_channels = [ch for ch in channelsToRemove if ch in raw.ch_names]
+            prefix_channels = [ch for ch in raw.ch_names
+                if any(ch.lower().startswith(prefix.lower()) for prefix in badChanPrefixes)]
+            suffix_channels = [ch for ch in raw.ch_names
+                if any(ch.lower().endswith(suffix.lower()) for suffix in badChanSuffixes)]
+            existing_bad_channels = natsorted(set(existing_bad_channels + prefix_channels + suffix_channels))
+
             if not existing_bad_channels:
                 print(f"\nSkipping (no bad channels found): {patientID} - {fileName}\n")
                 continue
