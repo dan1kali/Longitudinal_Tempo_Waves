@@ -204,9 +204,9 @@ class MicromedIO:
             picks = self.micromed_header.ch_names
 
         if n_bytes in [1, 2]:
-            dt = np.dtype(np.uint16, "little")
+            dt = np.dtype("<u2")
         elif n_bytes == 4:
-            dt = np.dtype(np.int32, "little")
+            dt = np.dtype("<i4")
         else:
             raise ValueError(f"Error: code not yet implemented for n_bytes={n_bytes}.")
 
