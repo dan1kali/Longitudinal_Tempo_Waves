@@ -1,5 +1,6 @@
 import os
 import mne
+import time
 from natsort import natsorted
 from longitudinal_tempo_waves.mixed_micromed_io.mixed_to_mne import create_mne_from_mixed_micromed_recording
 
@@ -28,13 +29,16 @@ def ObtainEEGFilePaths(basePath, patient_index=None, file_index=None):
 
     return eegFileList, patientList
 
-def TRCtoFIF(eegFileList, fifFileList, saveFIF=True):
+def TRCtoFIF(eegFileList, fifFileList, saveFIF=True, anonymize=True, removeChannels=False, channelsToRemove =[],prefixesToRemove=[], suffixesToRemove=[]):
     
     if not isinstance(eegFileList, list):
         eegFileList = [eegFileList]
         fifFileList = [fifFileList]
 
+    total_start = time.time()
+
     for f in range(len(eegFileList)):
+        file_start = time.time()
         eegFilePath = eegFileList[f]
         fifFilePath = fifFileList[f]
 
@@ -54,9 +58,17 @@ def TRCtoFIF(eegFileList, fifFileList, saveFIF=True):
         # plt.show()
         
         if saveFIF:
+            if anonymize:
+                raw.anonymize(daysback=0)
+            if removeChannels:
+                raw = removeBadChannels(raw, channelsToRemove, prefixesToRemove, suffixesToRemove)
             raw.save(fifFilePath, overwrite=True)
-            print(f'Saved {patientID} - {fileName} as .fif!')
-            
+            file_end = time.time()
+            print(f'Saved {patientID} - {fileName} as .fif! in {file_end - file_start:.1f} seconds')
+        
+    total_end = time.time()
+    print(f"\nTotal processing time: {total_end - total_start:.1f} seconds")
+
         # print("Number of channels:", len(fifFile.info['ch_names']),'\n\n')
         # print("Channel names:", fifFile.info['ch_names'], '\n\n')
         # print("Channel types:", fifFile.get_channel_types(), '\n\n')
@@ -83,16 +95,23 @@ def removeBadChannels(fifFileList, channelsToRemove, badChanPrefixes=[], badChan
     badChanPrefixes : list of str, optional
         List of prefixes for channels to remove
     """
+    total_start = time.time()
 
     if not isinstance(fifFileList, list):
         fifFileList = [fifFileList]
 
-    for file in fifFileList:
-        fileName = os.path.splitext(os.path.basename(file))[0]
-        patientID = os.path.basename(os.path.dirname(file))
-        try:
+    for item in fifFileList:
+        file_start = time.time()
+        if isinstance(item, mne.io.BaseRaw):
+            raw = item
+            file = None
+        else:
+            file = item
+            fileName = os.path.splitext(os.path.basename(file))[0]
+            patientID = os.path.basename(os.path.dirname(file))
             raw = mne.io.read_raw_fif(file, preload=True)
 
+        try:
             # Remove bad channels
             existing_bad_channels = [ch for ch in channelsToRemove if ch in raw.ch_names]
             prefix_channels = [ch for ch in raw.ch_names
@@ -104,20 +123,30 @@ def removeBadChannels(fifFileList, channelsToRemove, badChanPrefixes=[], badChan
             if not existing_bad_channels:
                 print(f"\nSkipping (no bad channels found): {patientID} - {fileName}\n")
                 continue
+            
             raw.drop_channels(existing_bad_channels)
 
-            # Save cleaned file in a mirrored directory structure
-            if replaceCleaned:
-                save_path = file
+            if file is None:
+                print('Removed extra channels from file!')
+                return raw
+
             else:
-                parts = file.split(os.sep)
-                save_path = os.sep.join(["fif_rm_chans" if p == "fif" else p for p in parts])
-                if os.path.exists(save_path):
-                    print(f"Skipping (already removed channels): {patientID} - {fileName}")
-                    continue
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            raw.save(save_path, overwrite=True)
-            print(f'\nRemoved bad channels from {patientID} - {fileName}\n')
+                if replaceCleaned:
+                    save_path = file
+                else:
+                    parts = file.split(os.sep)
+                    save_path = os.sep.join(["fif_rm_chans" if p == "fif" else p for p in parts])
+                    if os.path.exists(save_path):
+                        print(f"Skipping (already removed channels): {patientID} - {fileName}")
+                        continue
+                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                
+                raw.save(save_path, overwrite=True)
+                file_end = time.time()
+                print(f'\nRemoved bad channels from {patientID} - {fileName}  in {file_end - file_start:.1f} seconds\n')
 
         except Exception as exc:
             print(f"Skipped {patientID} - {fileName}: {exc}")
+    
+    total_end = time.time()
+    print(f"\nTotal processing time: {total_end - total_start:.1f} seconds")
