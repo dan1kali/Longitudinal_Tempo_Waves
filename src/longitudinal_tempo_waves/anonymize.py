@@ -81,49 +81,49 @@ def exportTimeMapping(
     # -------------------------
     # 4. session split
     # -------------------------
-    df = df.sort_values(["patient", "meas_date"]).copy()
+    df = df.sort_values(["patient", "meas_date", "filename"]).copy()
 
     gap = df.groupby("patient")["meas_date"].diff()
     threshold = pd.Timedelta(f"{min_gap_bt_sessions_days}D")
 
-    df["session_id"] = (gap > threshold) | gap.isna()
-    df["session_id"] = df.groupby("patient")["session_id"].cumsum().astype(int)
+    df["session_id"] = ((gap > threshold) | gap.isna()).groupby(df["patient"]).cumsum().astype(int)
 
     # -------------------------
     # 5. ordering
     # -------------------------
     df = df.sort_values(["patient", "session_id", "meas_date", "filename"])
-    df["within_session_index"] = df.groupby(["patient", "session_id"]).cumcount() + 1
+
+    df["session_order"] = df.groupby(["patient", "session_id"]).cumcount() + 1
 
     # -------------------------
     # 6. session-relative time
     # -------------------------
-    df["session_start"] = df.groupby(["patient", "session_id"])["meas_date"].transform("min")
+    df["session_start"] = df.groupby(["patient", "session_id"])["meas_date"].transform("first")
 
-    df["time_since_session_start_sec"] = (df["meas_date"] - df["session_start"]).dt.total_seconds()
+    df["time_elapsed_sec"] = (df["meas_date"] - df["session_start"]).dt.total_seconds()
 
-    df["time_since_session_start_hms"] = pd.to_timedelta(df["time_since_session_start_sec"], unit="s").astype(str)
+    df["time_elapsed_hms"] = pd.to_timedelta(df["time_elapsed_sec"], unit="s").astype(str)
 
     # -------------------------
     # 7. time since last recording
     # -------------------------
-    df["time_since_last_sec"] = df.groupby(["patient", "session_id"])["meas_date"].diff().dt.total_seconds()
+    df["time_since_prev_sec"] = df.groupby(["patient", "session_id"])["meas_date"].diff().dt.total_seconds().round(1)
 
     def sec_to_hms(x):
         if pd.isna(x):
-            return "N/A"
+            return pd.NA
         x = int(x)
         h = x // 3600
         m = (x % 3600) // 60
         s = x % 60
         return f"{h:02d}:{m:02d}:{s:02d}"
 
-    df["time_since_last_hms"] = df["time_since_last_sec"].apply(sec_to_hms)
+    df["time_since_prev_hms"] = df["time_since_prev_sec"].apply(sec_to_hms)
 
     # -------------------------
     # 8. duration
     # -------------------------
-    df["recording_duration_sec"] = df["recording_duration_sec"].astype(float)
+    df["recording_duration_sec"] = df["recording_duration_sec"].astype(float).round(1)
     df["recording_duration_hms"] = df["recording_duration_sec"].apply(sec_to_hms)
 
     # -------------------------
@@ -134,33 +134,35 @@ def exportTimeMapping(
         "filename",
         "5_year_block",
         "session_id",
-        "within_session_index",
+        "session_order",
         "time_of_day",
-        "time_since_session_start_hms",
-        "time_since_session_start_sec",
-        "time_since_last_hms",
-        "time_since_last_sec",
+        "time_elapsed_hms",
+        "time_since_prev_hms",
         "recording_duration_hms",
-        "recording_duration_sec"]]
+        "time_elapsed_sec",
+        "time_since_prev_sec",
+        "recording_duration_sec",]]
 
     # -------------------------
     # 10. optional units row
     # -------------------------
-    units_row = pd.DataFrame([[
-                            "string",
-                            "string",
-                            "string",
-                            "int",
-                            "int",
-                            "time",
-                            "time",
-                            "seconds",
-                            "time",
-                            "seconds",
-                            "time",
-                            "seconds"]], columns=df_export.columns)
+    units = {
+        "patient": "string",
+        "filename": "string",
+        "5_year_block": "index",
+        "session_id": "index",
+        "session_order": "index",
+        "time_of_day": "hh:mm:ss",
+        "recording_duration_hms": "hh:mm:ss",
+        "time_elapsed_hms": "hh:mm:ss",
+        "time_since_prev_hms": "hh:mm:ss",
+        "recording_duration_sec": "seconds",
+        "time_elapsed_sec": "seconds",
+        "time_since_prev_sec": "seconds"
+        }
 
-    final_df = pd.concat([units_row, df_export], ignore_index=True)
+    units = pd.DataFrame([units])[df_export.columns]
+    final_df = pd.concat([units, df_export], ignore_index=True)
 
     # -------------------------
     # 11. export if requested
@@ -169,7 +171,7 @@ def exportTimeMapping(
         os.makedirs(os.path.dirname(outputPath), exist_ok=True)
         final_df.to_csv(outputPath, index=False)
     else:
-        print("No output path provided! Returning dataframe without saving")
+        print("No output path provided. Returning dataframe without saving.")
 
     print(f"\nAll time data mapped to csv in {time.time() - total_start:.1f} seconds!")
     return final_df
@@ -203,6 +205,7 @@ def visualizeRecordingTimeline(
         If True, calls plt.show() for each patient.
     """
 
+    total_start = time.time()
     # -------------------------
     # LOAD DATA
     # -------------------------
@@ -213,7 +216,7 @@ def visualizeRecordingTimeline(
 
     # Type safety
     df["session_id"] = df["session_id"].astype(int)
-    df["recording_duration_sec"] = df["recording_duration_sec"].astype(float)
+    df["recording_duration_sec"] = df["recording_duration_sec"].astype(float).round(1)
 
     # Specify patients, or all if "None"
     if patient is not None:
@@ -235,7 +238,7 @@ def visualizeRecordingTimeline(
         # Optional global timeline
         if not use_session_relative_time:
             # reconstruct pseudo-global time ordering
-            sub = sub.sort_values(["session_id", "within_session_index"])
+            sub = sub.sort_values(["session_id", "session_order"])
             sub["global_start"] = sub.groupby("patient").cumcount() * 10  # fallback spacing
 
         # Color map per session
@@ -245,7 +248,7 @@ def visualizeRecordingTimeline(
             y = y_map[row["session_id"]]
 
             if use_session_relative_time:
-                start = row["time_since_session_start_sec"]
+                start = row["time_elapsed_sec"]
             else:
                 start = row.get("global_start", 0)
 
@@ -268,9 +271,9 @@ def visualizeRecordingTimeline(
 
         if show:
             plt.show()
+    print(f"\nVisualization completed in {time.time() - total_start:.1f} seconds!")
 
     return df
-
 
 
 def anonymizeFifFiles(fifFileList, overwrite=False):

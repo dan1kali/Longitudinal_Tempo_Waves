@@ -1,4 +1,5 @@
 import os
+import traceback
 import mne
 import time
 from natsort import natsorted
@@ -37,6 +38,7 @@ def TRCtoFIF(eegFileList, fifFileList, saveFIF=True, anonymize=True,
         fifFileList = [fifFileList]
 
     total_start = time.time()
+    failedFiles = []
 
     for f in range(len(eegFileList)):
         file_start = time.time()
@@ -46,26 +48,35 @@ def TRCtoFIF(eegFileList, fifFileList, saveFIF=True, anonymize=True,
         fileName = os.path.splitext(os.path.basename(eegFilePath))[0]
         patientID = os.path.basename(os.path.dirname(eegFilePath))
         
-        if os.path.exists(fifFilePath):
-            print(f"Skipping, already exists: {patientID} - {fileName}")
-            continue
-        else:
-            os.makedirs(os.path.dirname(fifFilePath), exist_ok=True)
-            print(f'\nProcessing: {patientID} - {fileName}')
+        try:
 
-        raw = create_mne_from_mixed_micromed_recording(eegFilePath)
-        # raw.load_data()
-        # raw.plot()
-        # plt.show()
+            if os.path.exists(fifFilePath):
+                print(f"Skipping, already exists: {patientID} - {fileName}")
+                continue
+            else:
+                os.makedirs(os.path.dirname(fifFilePath), exist_ok=True)
+                print(f'\nProcessing: {patientID} - {fileName}')
+
+            raw = create_mne_from_mixed_micromed_recording(eegFilePath)
+            # raw.load_data()
+            # raw.plot()
+            # plt.show()
+            
+            if saveFIF:
+                if anonymize:
+                    raw.anonymize()
+                if removeChannels:
+                    raw = removeBadChannels(raw, channelsToRemove, prefixesToRemove, suffixesToRemove)
+                raw.save(fifFilePath, overwrite=True)
+                print(f'Saved {patientID} - {fileName} as .fif! in {time.time() - file_start:.1f} seconds')
         
-        if saveFIF:
-            if anonymize:
-                raw.anonymize()
-            if removeChannels:
-                raw = removeBadChannels(raw, channelsToRemove, prefixesToRemove, suffixesToRemove)
-            raw.save(fifFilePath, overwrite=True)
-            print(f'Saved {patientID} - {fileName} as .fif! in {time.time() - file_start:.1f} seconds')
-        
+        except Exception as e:
+            print(f"\nError processing {patientID} - {fileName}: {e}")
+            traceback.print_exc()
+
+            failedFiles.append((patientID, fileName, str(e)))
+            continue  # move to next file
+
     print(f"\nTotal processing time: {time.time() - total_start:.1f} seconds")
 
         # print("Number of channels:", len(fifFile.info['ch_names']),'\n\n')
@@ -73,6 +84,11 @@ def TRCtoFIF(eegFileList, fifFileList, saveFIF=True, anonymize=True,
         # print("Channel types:", fifFile.get_channel_types(), '\n\n')
         # total_time_sec = fifFile.n_times / fifFile.info['sfreq']
         # print(f"Total time: {int(total_time_sec // 60)}m {int(total_time_sec % 60)}s", '\n\n')
+
+    if failedFiles:
+        print("\nSummary of failed files:")
+        for patientID, fileName, err in failedFiles:
+            print(f"- {patientID} - {fileName}: {err}")
 
 def uniqueChannels(fifFileList):
     unique_chans = set()
@@ -125,7 +141,7 @@ def removeBadChannels(fifFileList, channelsToRemove, prefixesToRemove=[], suffix
             
             existing_bad_channels = natsorted(set(existing_bad_channels + prefix_channels + suffix_channels))
             if not existing_bad_channels:
-                print(f"\nSkipping (no bad channels found): {patientID} - {fileName}\n")
+                print("\nSkipping (no bad channels found)\n")
                 continue
             
             raw.drop_channels(existing_bad_channels)
