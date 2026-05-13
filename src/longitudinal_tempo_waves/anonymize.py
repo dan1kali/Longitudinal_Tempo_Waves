@@ -1,5 +1,7 @@
 import os
+from re import sub
 import time
+from matplotlib.ticker import MultipleLocator
 import mne
 import numpy as np
 import pandas as pd
@@ -147,7 +149,7 @@ def exportTimeMapping(
     # 10. optional units row
     # -------------------------
     units = {
-        "patient": "string",
+        "patient": "units",
         "filename": "string",
         "5_year_block": "index",
         "session_id": "index",
@@ -180,9 +182,9 @@ def exportTimeMapping(
 def visualizeRecordingTimeline(
     csvPath,
     patient=None,
-    figsize=(12, 6),
+    figsize=(12, 1.5),
     use_session_relative_time=True,
-    show=True):
+    show=False):
     """
     Visualize EEG recording sessions from patient_time_mapping.csv.
 
@@ -205,23 +207,28 @@ def visualizeRecordingTimeline(
         If True, calls plt.show() for each patient.
     """
 
-    total_start = time.time()
+    # total_start = time.time()
     # -------------------------
     # LOAD DATA
     # -------------------------
     df = pd.read_csv(csvPath)
 
     # Remove units row
-    df = df[df["patient"] != "string"].copy()
+    df = df[~df["patient"].isin(["string", "units"])].copy()
 
     # Type safety
     df["session_id"] = df["session_id"].astype(int)
+    df["session_order"] = df["session_order"].astype(int)
+
+    df["time_elapsed_sec"] = df["time_elapsed_sec"].astype(float).round(1)
+    df["time_since_prev_sec"] = df["time_since_prev_sec"].astype(float).round(1)
     df["recording_duration_sec"] = df["recording_duration_sec"].astype(float).round(1)
 
-    # Specify patients, or all if "None"
+    # Optional patient filtering if selected, else selects all
     if patient is not None:
         df = df[df["patient"] == patient].copy()
 
+    # Get list of patients
     patients = df["patient"].unique()
 
     # -------------------------
@@ -234,44 +241,80 @@ def visualizeRecordingTimeline(
 
         sessions = sorted(sub["session_id"].unique())
         y_map = {s: i for i, s in enumerate(sessions)}
-
-        # Optional global timeline
         if not use_session_relative_time:
-            # reconstruct pseudo-global time ordering
-            sub = sub.sort_values(["session_id", "session_order"])
-            sub["global_start"] = sub.groupby("patient").cumcount() * 10  # fallback spacing
+            def hms_to_seconds(t):
+                h, m, s = map(int, t.split(':'))
+                return h * 3600 + m * 60 + s
+
+            first_time_sec = hms_to_seconds(sub["time_of_day"].iloc[0])
+            # print(f"[DEBUG] first_time_sec = {first_time_sec:.4f} s ({first_time_sec/3600:.4f} h)")
 
         # Color map per session
         colors = cm.get_cmap("tab10", len(sessions))
-
+        
         for _, row in sub.iterrows():
             y = y_map[row["session_id"]]
 
             if use_session_relative_time:
-                start = row["time_elapsed_sec"]
+                start = row["time_elapsed_sec"] / 3600
+                start_s = sub["time_elapsed_sec"].min() / 3600
+                end_s = (sub["time_elapsed_sec"] + sub["recording_duration_sec"]).max() / 3600
+
             else:
-                start = row.get("global_start", 0)
+                start = (first_time_sec + row["time_elapsed_sec"]) / 3600
+                start_s = (first_time_sec + sub["time_elapsed_sec"]).min() / 3600
+                end_s = (first_time_sec + sub["time_elapsed_sec"] + sub["recording_duration_sec"]).max() / 3600
 
-            duration = row["recording_duration_sec"]
-
+            duration = row["recording_duration_sec"] / 3600
+            
+            # add timeline span bar (light blue) for entire session duration
             plt.barh(
                 y=y,
-                width=duration,
-                left=start,
-                height=0.6,
-                color=colors(y))
+                width=end_s - start_s,
+                left=start_s,
+                height=0.15,
+                color="lightblue",
+                alpha=0.25,
+                zorder=2)
+            
+            # overlay darker bar for actual recording time
+            plt.barh(y=y,
+                    width=duration,
+                    left=start,
+                    height=0.1,
+                    color=colors(y),
+                    zorder=3)
 
-        plt.yticks(list(y_map.values()), [f"Session {s}" for s in sessions])
-        plt.xlabel("Time (seconds)")
+        plt.yticks(list(y_map.values()), [f"{s}" for s in sessions])
+        plt.xlabel("Time (hours)")
         plt.ylabel("Session")
         plt.title(f"Recording Timeline - {pat}")
         plt.grid(True, axis="x", linestyle="--", alpha=0.5)
-
+        plt.xlim(left=0)
         plt.tight_layout()
+
+
+        ax = plt.gca()
+        ax.set_ylim(-0.1, len(sessions) - 0.9)
+        
+        xmax = ax.get_xlim()[1]
+
+        for i, day_start in enumerate(np.arange(0, xmax + 24, 24)):
+            if i % 2 == 0:
+                ax.axvspan(
+                    day_start,
+                    day_start + 24,
+                    color='gray',
+                    alpha=0.2,
+                    zorder=0
+                )
+
+        ax.xaxis.set_major_locator(MultipleLocator(6))
 
         if show:
             plt.show()
-    print(f"\nVisualization completed in {time.time() - total_start:.1f} seconds!")
+
+    # print(f"\nVisualization completed in {time.time() - total_start:.1f} seconds!")
 
     return df
 
