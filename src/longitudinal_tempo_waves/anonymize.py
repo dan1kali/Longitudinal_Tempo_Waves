@@ -1,6 +1,7 @@
 import os
-from re import sub
 import time
+from turtle import lt
+from matplotlib.patches import Patch
 from matplotlib.ticker import MultipleLocator
 import mne
 import numpy as np
@@ -292,7 +293,7 @@ def visualizeRecordingTimeline(
         plt.grid(True, axis="x", linestyle="--", alpha=0.5)
         plt.xlim(left=0)
         plt.tight_layout()
-
+        plt.subplots_adjust(bottom=0.4)
 
         ax = plt.gca()
         ax.set_ylim(-0.1, len(sessions) - 0.9)
@@ -310,8 +311,21 @@ def visualizeRecordingTimeline(
                 )
 
         ax.xaxis.set_major_locator(MultipleLocator(6))
+    
 
-        if show:
+        legend_handles = [
+            Patch(facecolor="lightblue", alpha=0.25, label="Session window"),
+            Patch(facecolor=colors(y), alpha=0.8, label="Recording segments")
+        ]
+
+        plt.legend(
+            handles=legend_handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.6),
+            ncol=2,   # optional: spreads legend horizontally
+            borderaxespad=0
+        )
+        if plt.show:
             plt.show()
 
     # print(f"\nVisualization completed in {time.time() - total_start:.1f} seconds!")
