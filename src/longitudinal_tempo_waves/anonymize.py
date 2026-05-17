@@ -1,4 +1,5 @@
 import os
+from re import sub
 import time
 from turtle import lt
 from matplotlib.patches import Patch
@@ -182,10 +183,10 @@ def exportTimeMapping(
 
 def visualizeRecordingTimeline(
     csvPath,
-    patient=None,
-    figsize=(12, 1.5),
-    use_session_relative_time=True,
-    show=False):
+    patient_ID=None,
+    figsize=(12, 1),
+    use_session_relative_time=False,
+    show=True):
     """
     Visualize EEG recording sessions from patient_time_mapping.csv.
 
@@ -194,7 +195,7 @@ def visualizeRecordingTimeline(
     csvPath : str
         Path to CSV file produced by your pipeline.
     
-    patient : str or None
+    patient_ID : str or None
         If provided, plots only one patient. Otherwise plots all patients.
 
     figsize : tuple
@@ -208,7 +209,6 @@ def visualizeRecordingTimeline(
         If True, calls plt.show() for each patient.
     """
 
-    # total_start = time.time()
     # -------------------------
     # LOAD DATA
     # -------------------------
@@ -226,109 +226,190 @@ def visualizeRecordingTimeline(
     df["recording_duration_sec"] = df["recording_duration_sec"].astype(float).round(1)
 
     # Optional patient filtering if selected, else selects all
-    if patient is not None:
-        df = df[df["patient"] == patient].copy()
+    patients = sorted(df["patient"].dropna().unique())
 
-    # Get list of patients
-    patients = df["patient"].unique()
+    if patient_ID is not None:
+        # multiple inputs
+        if isinstance(patient_ID, (list, tuple, set)):
+            if len(patient_ID) == 0:
+                patient_ids = patients
+            else:
+                first = patient_ID[0]  # type: ignore
+                if isinstance(first, str):
+                    patient_ids = list(patient_ID)
+                else:
+                    patient_ids = [patients[i - 1] for i in patient_ID]
+        elif isinstance(patient_ID, str):
+            patient_ids = [patient_ID]
+        elif isinstance(patient_ID, int):
+            patient_ids = [patients[patient_ID - 1]]
+    else:
+        patient_ids = patients
+
+    df = df[df["patient"].isin(patient_ids)].copy()
 
     # -------------------------
-    # PLOT PER PATIENT
+    # PLOT 
     # -------------------------
-    for pat in patients:
-        sub = df[df["patient"] == pat].copy()
 
-        plt.figure(figsize=figsize)
+    n_patients = len(patient_ids)
 
-        sessions = sorted(sub["session_id"].unique())
-        y_map = {s: i for i, s in enumerate(sessions)}
+    fig, axes = plt.subplots(
+        n_patients,
+        1,
+        figsize=(figsize[0], max(2, n_patients * figsize[1])),
+        # constrained_layout=True,
+        sharex=True  # enforce shared x-axis
+    )
+
+    if n_patients == 1:
+        axes = [axes]
+
+    # compute global xmax
+    global_xmax = 0
+
+    for pat in patient_ids:
+        sub = df[df["patient"] == pat]
+
         if not use_session_relative_time:
             def hms_to_seconds(t):
                 h, m, s = map(int, t.split(':'))
                 return h * 3600 + m * 60 + s
 
             first_time_sec = hms_to_seconds(sub["time_of_day"].iloc[0])
-            # print(f"[DEBUG] first_time_sec = {first_time_sec:.4f} s ({first_time_sec/3600:.4f} h)")
 
-        # Color map per session
+            end = (
+                first_time_sec
+                + (sub["time_elapsed_sec"] + sub["recording_duration_sec"]).max()
+            ) / 3600
+        else:
+            end = (
+                sub["time_elapsed_sec"]
+                + sub["recording_duration_sec"]
+            ).max() / 3600
+
+        global_xmax = np.ceil(max(global_xmax, end) / 12) * 12
+
+    # Plotting
+    for ax, pat in zip(axes, patient_ids):
+
+        sub = df[df["patient"] == pat].copy()
+
+        sessions = sorted(sub["session_id"].unique())
+        y_positions = np.linspace(-1.2, 1.2, len(sessions) + 2)[1:-1]
+        y_map = {s: y_positions[i] for i, s in enumerate(sessions)}
+
         colors = cm.get_cmap("tab10", len(sessions))
-        
-        for _, row in sub.iterrows():
-            y = y_map[row["session_id"]]
+
+        # session-level time conversion helper
+        def hms_to_seconds(t):
+            h, m, s = map(int, t.split(':'))
+            return h * 3600 + m * 60 + s
+
+        session_first_time = (
+            sub.groupby("session_id")["time_of_day"]
+            .first()
+            .apply(hms_to_seconds)
+        )
+
+        # ---------------------------------------------------------
+        # BUILD SESSION SPANS
+        # ---------------------------------------------------------
+        session_spans = {}
+
+        for s in sessions:
+            g = sub[sub["session_id"] == s]
+            first_time_sec = session_first_time.loc[s]
 
             if use_session_relative_time:
-                start = row["time_elapsed_sec"] / 3600
-                start_s = sub["time_elapsed_sec"].min() / 3600
-                end_s = (sub["time_elapsed_sec"] + sub["recording_duration_sec"]).max() / 3600
-
+                start_s = g["time_elapsed_sec"].min() / 3600
+                end_s = (g["time_elapsed_sec"] + g["recording_duration_sec"]).max() / 3600
             else:
-                start = (first_time_sec + row["time_elapsed_sec"]) / 3600
-                start_s = (first_time_sec + sub["time_elapsed_sec"]).min() / 3600
-                end_s = (first_time_sec + sub["time_elapsed_sec"] + sub["recording_duration_sec"]).max() / 3600
+                start_s = (first_time_sec + g["time_elapsed_sec"].min()) / 3600
+                end_s = (first_time_sec + (g["time_elapsed_sec"] + g["recording_duration_sec"]).max()) / 3600
+
+            session_spans[s] = (start_s, end_s)
+
+        # ---------------------------------------------------------
+        # ROW-LEVEL PLOTTING
+        # ---------------------------------------------------------
+        for _, row in sub.iterrows():
+
+            y = y_map[row["session_id"]]
+
+            # event start (row-level)
+            if use_session_relative_time:
+                start = row["time_elapsed_sec"] / 3600
+            else:
+                start = (
+                    session_first_time.loc[row["session_id"]]
+                    + row["time_elapsed_sec"]
+                ) / 3600
 
             duration = row["recording_duration_sec"] / 3600
-            
-            # add timeline span bar (light blue) for entire session duration
-            plt.barh(
+
+            # timeline span
+            start_s, end_s = session_spans[row["session_id"]]
+
+            ax.barh(
                 y=y,
                 width=end_s - start_s,
                 left=start_s,
-                height=0.15,
+                height=(1.6 - 0.2 * len(sessions)) / len(sessions) if len(sessions) > 1 else 1.5,
                 color="lightblue",
                 alpha=0.25,
                 zorder=2)
-            
-            # overlay darker bar for actual recording time
-            plt.barh(y=y,
-                    width=duration,
-                    left=start,
-                    height=0.1,
-                    color=colors(y),
-                    zorder=3)
 
-        plt.yticks(list(y_map.values()), [f"{s}" for s in sessions])
-        plt.xlabel("Time (hours)")
-        plt.ylabel("Session")
-        plt.title(f"Recording Timeline - {pat}")
-        plt.grid(True, axis="x", linestyle="--", alpha=0.5)
-        plt.xlim(left=0)
-        plt.tight_layout()
-        plt.subplots_adjust(bottom=0.4)
+            # recording segments
+            ax.barh(
+                y=y,
+                width=duration,
+                left=start,
+                height=(1.6 - 0.4 * len(sessions)) / len(sessions) if len(sessions) > 1 else 1,
+                color=colors(y),
+                zorder=3)
 
-        ax = plt.gca()
-        ax.set_ylim(-0.1, len(sessions) - 0.9)
-        
-        xmax = ax.get_xlim()[1]
+        # formatting
+        ax.set_yticks(list(y_map.values()))
+        ax.set_yticklabels([str(s) for s in sessions])
+        ax.set_title(f"{pat}",fontsize=10)
+        ax.grid(True, axis="x", linestyle="--", alpha=0.5)
 
-        for i, day_start in enumerate(np.arange(0, xmax + 24, 24)):
+        # day shading
+        for i, day_start in enumerate(np.arange(24, global_xmax + 24, 24)):
             if i % 2 == 0:
                 ax.axvspan(
                     day_start,
                     day_start + 24,
-                    color='gray',
+                    color="gray",
                     alpha=0.2,
-                    zorder=0
-                )
+                    zorder=0)
 
+        # ax.set_ylim(-0.1, len(sessions) - 0.9) # spacing of y axis
+        ax.set_ylim(-1, 1) # spacing of y axis
         ax.xaxis.set_major_locator(MultipleLocator(6))
+        ax.set_xlim(0, global_xmax)
+
+    plt.xlabel("Time (hours)")
+    fig.suptitle("Recording Timeline")
+
+    legend_handles = [Patch(facecolor="lightblue", alpha=0.45, label="Session window"),
+                    Patch(facecolor=colors(y), alpha=0.8, label="Recording segments"), # type: ignore
+                    Patch(facecolor="lightgray", alpha=0.8, label="Days")]
+
+    fig.legend(handles=legend_handles,
+        loc="lower center",
+        # bbox_to_anchor=(0.5, 0.0),
+        bbox_to_anchor=(0.5, 0),
+        ncol=3)
+
+    fig.tight_layout(rect=[0, 0.03, 1, 1]) # type: ignore
+
+    # use with contrained layout
+    # plt.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.55), ncol=3,) # spreads legend horizontally )
     
-
-        legend_handles = [
-            Patch(facecolor="lightblue", alpha=0.25, label="Session window"),
-            Patch(facecolor=colors(y), alpha=0.8, label="Recording segments")
-        ]
-
-        plt.legend(
-            handles=legend_handles,
-            loc="upper center",
-            bbox_to_anchor=(0.5, -0.6),
-            ncol=2,   # optional: spreads legend horizontally
-            borderaxespad=0
-        )
-        if plt.show:
-            plt.show()
-
-    # print(f"\nVisualization completed in {time.time() - total_start:.1f} seconds!")
+    if show:
+        plt.show()
 
     return df
 
