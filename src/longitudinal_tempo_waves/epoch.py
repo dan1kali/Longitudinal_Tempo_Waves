@@ -3,7 +3,7 @@ import mne
 import pandas as pd
 import time
 
-def printAnnotations(fifFileList, saveCSV=False):
+def printAnnotationsFromFilelist(fifFileList, saveParquetPath=None):
     rows = []
     for file in fifFileList:
         fileName = os.path.splitext(os.path.basename(file))[0]
@@ -17,8 +17,8 @@ def printAnnotations(fifFileList, saveCSV=False):
                 "patient": patientID,
                 "filename": fileName,
                 "onset": ann.onset,
-                "duration": ann.duration,
                 "annotation": ann.description,
+                "duration": ann.duration,
                 "sfreq" : raw.info["sfreq"]})
             if ann.ch_names is not None:
                 df["ch_names"] = ann.ch_names
@@ -33,10 +33,29 @@ def printAnnotations(fifFileList, saveCSV=False):
 
     combined_df = pd.concat(rows, ignore_index=True)
 
-    if saveCSV:
-        combined_df.to_csv("annotations.csv", index=False)
+    if saveParquetPath:
+        # combined_df.to_csv(saveCsvPath, index=False)
+        combined_df.to_parquet(saveParquetPath, engine="pyarrow")
 
     return combined_df
+
+
+def printAnnotationsFromParquet(parquetPath):
+    # df = pd.read_csv(csvPath)
+    df = pd.read_parquet(parquetPath)
+
+    if "original_rec_time" in df.columns:
+        df["original_rec_time"] = pd.to_datetime(df["original_rec_time"], errors="coerce")
+
+    if "onset" in df.columns:
+        df["onset"] = pd.to_numeric(df["onset"], errors="coerce")
+
+    if "original_rec_time" in df.columns and "onset" in df.columns:
+        df["absolute_rec_time"] = df["original_rec_time"] + pd.to_timedelta(df["onset"], unit="s")
+
+    return df
+
+
 
 def relabelFifAnnotations(fifFileList, renameDict, overwrite=False):
     """
