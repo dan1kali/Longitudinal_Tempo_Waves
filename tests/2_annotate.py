@@ -7,9 +7,7 @@ from longitudinal_tempo_waves.initialize import ObtainEEGFilePaths
 from longitudinal_tempo_waves.annotate import cleanFifAnnotations, compileAnnotationsFromFilelist, loadAnnotationsFromFile, relabelFifAnnotations, visualizeAnnotationTimeline
 import pandas as pd
 
-# BasePath = config.raw_dir
-BasePath = '/Users/macbook/Work/DugueLab/Longitudinal_Tempo_Waves/Data/long_duration'
-
+BasePath = config.raw_dir
 
 # %%
 #########################################################################
@@ -17,12 +15,12 @@ BasePath = '/Users/macbook/Work/DugueLab/Longitudinal_Tempo_Waves/Data/long_dura
 #########################################################################
 
 # ----------------- Obtain FIF file paths -----------------
-fifBasePath = os.path.join(BasePath, 'fif')
-fifFileList, _ = ObtainEEGFilePaths(fifBasePath,patient_index=None)
+# fifBasePath = os.path.join(BasePath, 'fif')
+# fifFileList, _ = ObtainEEGFilePaths(fifBasePath,patient_index=None)
 
 # ------------- Get rid of unicode in annotations -------------
-fifSaveFileList = [os.path.splitext(os.sep.join(["fif_fix_annotations" if p == "fif" else p for p in path.split(os.sep)]))[0] + ".fif" for path in fifFileList]
-cleanFifAnnotations(fifFileList, savePathList=fifSaveFileList)
+# fifSaveFileList = [os.path.splitext(os.sep.join(["fif_fix_annotations" if p == "fif" else p for p in path.split(os.sep)]))[0] + ".fif" for path in fifFileList]
+# cleanFifAnnotations(fifFileList, savePathList=fifSaveFileList)
 
 
 # %%
