@@ -30,16 +30,16 @@ BasePath = config.raw_dir
 ########################################################################
 
 # -------------------- Build load and save paths -----------------------
-fifBasePath = os.path.join(BasePath, 'fif_fix_annotations')
-fifFileList, _ = ObtainEEGFilePaths(fifBasePath,patient_index=None)
+# fifBasePath = os.path.join(BasePath, 'fif_fix_annotations')
+# fifFileList, _ = ObtainEEGFilePaths(fifBasePath,patient_index=None)
 
-parquetPath = os.path.join(BasePath, "all_annotations.parquet")
-csvPath = os.path.join(BasePath, "all_annotations.csv")
+# parquetPath = os.path.join(BasePath, "all_annotations.parquet")
+# csvPath = os.path.join(BasePath, "all_annotations.csv")
 
-savePath=parquetPath
+# savePath=parquetPath
 
 # ------- Compile all annotations and export to .csv/.parquet ----------
-annotationDF = compileAnnotationsFromFilelist(fifFileList, savePath)
+# annotationDF = compileAnnotationsFromFilelist(fifFileList, savePath)
 
 
 # %%
@@ -48,9 +48,14 @@ annotationDF = compileAnnotationsFromFilelist(fifFileList, savePath)
 ############## (optional) Visualize Annotation Timeline ################
 ########################################################################
 
+# ------------------------- Build load paths ---------------------------
+parquetPath = os.path.join(BasePath, "all_annotations.parquet")
+# csvPath = os.path.join(BasePath, "all_annotations.csv")
+
+# -------------------- Select patients and files -----------------------
 patient_ID = [1]
 filename_list = None
-visualizeAnnotationTimeline(parquetPath,patient_ID=patient_ID,filename_list=filename_list)
+visualizeAnnotationTimeline(file_path=parquetPath, patient_ID=patient_ID, filename_list=filename_list)
 
 
 # %%
@@ -59,26 +64,28 @@ visualizeAnnotationTimeline(parquetPath,patient_ID=patient_ID,filename_list=file
 #################### Examine unique annotations ########################
 ########################################################################
 
-# --------------------- Build save paths ----------------------
+# ------------------------ Build save paths ---------------------------
 annotationTxt = os.path.join(BasePath, "annotations_unique.txt")
-annotationTableParquet = os.path.join(BasePath, "annotations_toreview.parquet")
-annotationTableCsv = os.path.join(BasePath, "annotations_toreview.csv")
 txtSavePath = annotationTxt
+
+annotationTableParquet = os.path.join(BasePath, "annotations_table.parquet")
+annotationTableCsv = os.path.join(BasePath, "annotations_table.csv")
 tableSavePath = annotationTableParquet
 
-# --------------------- Load the .csv/.parquet ----------------------
-annotationDF = loadAnnotationsFromFile(parquetPath)
+parquetPath = os.path.join(BasePath, "all_annotations.parquet")
+csvPath = os.path.join(BasePath, "all_annotations.csv")
 
-# --------------------- Get unique annotations ----------------------
+# ------- Load the .csv/.parquet and get unique annotations -----------
+annotationDF = loadAnnotationsFromFile(filePath=parquetPath)
 uniqueAnnotations = sorted(annotationDF["annotation"].unique())
 # print(uniqueAnnotations)
 
-# ------------------ Save unique annotations to .txt -----------------
+# ------------------ Save: unique annotations to .txt -----------------
 # with open(txtSavePath, "w", encoding="utf-8") as f:
 #     for ann in uniqueAnnotations:
 #         f.write(str(ann) + "\n")
 
-# ------------- Save unique annotations to editable table ------------
+# ------------- Save: unique annotations to editable table ------------
 review_df = pd.DataFrame({"old_label": uniqueAnnotations, "new_label": uniqueAnnotations }) 
 review_df.to_parquet(tableSavePath, engine="pyarrow")
 # review_df.to_csv(tableSavePath, index=False)
@@ -112,10 +119,9 @@ with open(config_path, "w") as f:
 
 # ---------------- Load rename dictionary from .json ------------------
 
-with open(config_path, "r") as f:
-    config = json.load(f)
-renameDict = config["rename_dict"]
+# with open(config_path, "r") as f:
+#     config = json.load(f)
+# renameDict = config["rename_dict"]
 
 # ---------------- Relabel annotations ------------------
-relabelFifAnnotations(fifFileList, renameDict, overwrite=False)
-
+# relabelFifAnnotations(fifFileList, renameDict, overwrite=False)
