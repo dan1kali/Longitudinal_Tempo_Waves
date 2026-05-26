@@ -8,6 +8,8 @@ from longitudinal_tempo_waves.annotate import cleanFifAnnotations, compileAnnota
 import pandas as pd
 
 BasePath = config.raw_dir
+BasePath = '/Users/macbook/Work/DugueLab/Longitudinal_Tempo_Waves/Data/long_duration'
+
 
 # %%
 #########################################################################
@@ -33,9 +35,7 @@ BasePath = config.raw_dir
 # fifBasePath = os.path.join(BasePath, 'fif_fix_annotations')
 # fifFileList, _ = ObtainEEGFilePaths(fifBasePath,patient_index=None)
 
-# parquetPath = os.path.join(BasePath, "all_annotations.parquet")
 # csvPath = os.path.join(BasePath, "all_annotations.csv")
-
 # savePath=parquetPath
 
 # ------- Compile all annotations and export to .csv/.parquet ----------
@@ -49,13 +49,12 @@ BasePath = config.raw_dir
 ########################################################################
 
 # ------------------------- Build load paths ---------------------------
-parquetPath = os.path.join(BasePath, "all_annotations.parquet")
-# csvPath = os.path.join(BasePath, "all_annotations.csv")
+csvPath = os.path.join(BasePath, "all_annotations.csv")
 
 # -------------------- Select patients and files -----------------------
 patient_ID = [1]
 filename_list = None
-visualizeAnnotationTimeline(file_path=parquetPath, patient_ID=patient_ID, filename_list=filename_list)
+visualizeAnnotationTimeline(file_path=csvPath, patient_ID=patient_ID, filename_list=filename_list)
 
 
 # %%
@@ -68,15 +67,12 @@ visualizeAnnotationTimeline(file_path=parquetPath, patient_ID=patient_ID, filena
 annotationTxt = os.path.join(BasePath, "annotations_unique.txt")
 txtSavePath = annotationTxt
 
-annotationTableParquet = os.path.join(BasePath, "annotations_table.parquet")
+csvLoadPath = os.path.join(BasePath, "all_annotations.csv")
 annotationTableCsv = os.path.join(BasePath, "annotations_table.csv")
-tableSavePath = annotationTableParquet
-
-parquetPath = os.path.join(BasePath, "all_annotations.parquet")
-csvPath = os.path.join(BasePath, "all_annotations.csv")
+tableSavePath = annotationTableCsv
 
 # ------- Load the .csv/.parquet and get unique annotations -----------
-annotationDF = loadAnnotationsFromFile(filePath=parquetPath)
+annotationDF = loadAnnotationsFromFile(filePath=csvLoadPath)
 uniqueAnnotations = sorted(annotationDF["annotation"].unique())
 # print(uniqueAnnotations)
 
@@ -87,8 +83,7 @@ uniqueAnnotations = sorted(annotationDF["annotation"].unique())
 
 # ------------- Save: unique annotations to editable table ------------
 review_df = pd.DataFrame({"old_label": uniqueAnnotations, "new_label": uniqueAnnotations }) 
-review_df.to_parquet(tableSavePath, engine="pyarrow")
-# review_df.to_csv(tableSavePath, index=False)
+review_df.to_csv(tableSavePath, index=False)
 
 
 # %%
@@ -98,10 +93,9 @@ review_df.to_parquet(tableSavePath, engine="pyarrow")
 ########################################################################
 
 # --------------------- Load file paths ----------------------
-reviewLoadPath = annotationTableParquet
+reviewLoadPath = annotationTableCsv
 
-# review_df = pd.read_csv(reviewLoadPath)
-review_df = pd.read_parquet(annotationTableParquet)
+review_df = pd.read_csv(annotationTableCsv)
 
 # ---------------- Create dictionary to .json ------------------
 renameDict = dict(zip(review_df["old_label"], review_df["new_label"]))
