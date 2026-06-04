@@ -7,6 +7,7 @@ from longitudinal_tempo_waves.mixed_micromed_io.mixed_to_mne import create_mne_f
 
 def ObtainEEGFilePaths(basePath, patient_index=None, file_index=None):
     eegFileList = []
+    eegFileNames = []
     patientList = natsorted([
         d for d in os.listdir(basePath) if d.startswith('PAT_')])
 
@@ -27,8 +28,9 @@ def ObtainEEGFilePaths(basePath, patient_index=None, file_index=None):
                 continue
 
             eegFileList.append(os.path.join(basePath, patient, file))
+            eegFileNames.append(os.path.splitext(file)[0])
 
-    return eegFileList, patientList
+    return eegFileList, patientList, eegFileNames
 
 def TRCtoFIF(eegFileList, fifFileList, saveFIF=True, anonymize=True, 
              removeChannels=False, channelsToRemove =[],prefixesToRemove=[], suffixesToRemove=[]):
