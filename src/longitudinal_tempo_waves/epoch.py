@@ -53,74 +53,74 @@ def epochFifFiles(fifFileList,event_id=None, generate_controls_csv=None, tmin=-3
             patientID = os.path.basename(os.path.dirname(file))
             raw = mne.io.read_raw_fif(file, preload=True)
 
-        # try:
-        if raw.annotations is None or len(raw.annotations) == 0:
-            print(f"Skipping (no annotations): {patientID} - {fileName}")
-            continue
-
-        events, event_ids_of_interest = mne.events_from_annotations(raw,event_id=event_id) # type: ignore
-
-        # Skip epochs that are within 2 hours of each other (keeps first)
-        event_times = events[:, 0] / raw.info['sfreq']
-        order = np.argsort(event_times)
-        event_times = event_times[order]
-        events = events[order]
-        min_gap = 3600*2  # 2 hours
-        kept_events = []
-        last_time = -np.inf
-        for ev, t in zip(events, event_times):
-            if t - last_time >= min_gap:
-                kept_events.append(ev)
-                last_time = t
-        events = np.array(kept_events)
-
-        epochs = mne.Epochs(raw,
-                            events,
-                            event_id=event_ids_of_interest,
-                            tmin=tmin,
-                            tmax=tmax,
-                            baseline=baseline,
-                            preload=True,
-                            reject=reject)
-
-
-        # Skip epochs that are close to start of recording
-        if len(epochs) == 0:
-            print(f"Skipping (0 valid epochs): {patientID} - {fileName}")
-            continue
-        
-        if resample_sfreq is not None:
-            epochs.resample(resample_sfreq)
-
-        if file is None:
-            print('Processed epochs!')
-            return epochs
-        
-        else:
-            # generate corresponding control epochs
-            if generate_controls_csv is not None:
-                filtered_fileList = [f for f in fifFileList if os.path.basename(os.path.dirname(f)) == patientID]
-                filtered_df = timeMapping_df[timeMapping_df["patient"] == patientID]
-                saveControlEpochs(fileName, filtered_fileList, filtered_df, events, 
-                                    tmin=tmin,tmax=tmax)
-
-            # save epochs
-            parts = file.split(os.sep)
-            save_path = os.sep.join(["fif_epochs" if "fif" in p and not p.endswith(".fif") else p for p in parts])
-            save_path = save_path.replace("_raw.fif", "_epo.fif")
-
-            if os.path.exists(save_path) and not overwrite:
-                print(f"Skipping (already epoched): {patientID} - {fileName}")
+        try:
+            if raw.annotations is None or len(raw.annotations) == 0:
+                print(f"Skipping (no annotations): {patientID} - {fileName}")
                 continue
+
+            events, event_ids_of_interest = mne.events_from_annotations(raw,event_id=event_id) # type: ignore
+
+            # Skip epochs that are within 2 hours of each other (keeps first)
+            event_times = events[:, 0] / raw.info['sfreq']
+            order = np.argsort(event_times)
+            event_times = event_times[order]
+            events = events[order]
+            min_gap = 3600*2  # 2 hours
+            kept_events = []
+            last_time = -np.inf
+            for ev, t in zip(events, event_times):
+                if t - last_time >= min_gap:
+                    kept_events.append(ev)
+                    last_time = t
+            events = np.array(kept_events)
+
+            epochs = mne.Epochs(raw,
+                                events,
+                                event_id=event_ids_of_interest,
+                                tmin=tmin,
+                                tmax=tmax,
+                                baseline=baseline,
+                                preload=True,
+                                reject=reject)
+
+
+            # Skip epochs that are close to start of recording
+            if len(epochs) == 0:
+                print(f"Skipping (0 valid epochs): {patientID} - {fileName}")
+                continue
+            
+            if resample_sfreq is not None:
+                epochs.resample(resample_sfreq)
+
+            if file is None:
+                print('Processed epochs!')
+                return epochs
+            
             else:
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                # generate corresponding control epochs
+                if generate_controls_csv is not None:
+                    filtered_fileList = [f for f in fifFileList if os.path.basename(os.path.dirname(f)) == patientID]
+                    filtered_df = timeMapping_df[timeMapping_df["patient"] == patientID]
+                    saveControlEpochs(fileName, filtered_fileList, filtered_df, events, 
+                                        tmin=tmin,tmax=tmax)
 
-            epochs.save(save_path, overwrite=True)
-            print(f"Epochs saved: {patientID} - {fileName} in {time.time() - file_start:.1f} seconds")
-            print("Events:", event_ids_of_interest)
+                # save epochs
+                parts = file.split(os.sep)
+                save_path = os.sep.join(["fif_epochs" if "fif" in p and not p.endswith(".fif") else p for p in parts])
+                save_path = save_path.replace("_raw.fif", "_epo.fif")
 
-        # except Exception as exc:
-        #     print(f"Skipped {patientID} - {fileName}: {exc}")
+                if os.path.exists(save_path) and not overwrite:
+                    print(f"Skipping (already epoched): {patientID} - {fileName}")
+                    continue
+                else:
+                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+                epochs.save(save_path, overwrite=True)
+                print(f"Epochs saved: {patientID} - {fileName} in {time.time() - file_start:.1f} seconds")
+                print("Events:", event_ids_of_interest)
+
+        except Exception as exc:
+            print(f"Skipped {patientID} - {fileName}: {exc}")
             
     print(f"\nTotal processing time: {time.time() - total_start:.1f} seconds")
 
