@@ -1,11 +1,9 @@
-from curses import raw
 import os
 import mne
 import time
 import numpy as np
 import pandas as pd
 from collections import defaultdict
-
 
 def epochFifFiles(fifFileList,event_id=None, generate_controls_csv=None, tmin=-30*60,tmax=5*60,baseline=(None, 0),
                   reject=None,resample_sfreq=None,overwrite=False):
@@ -88,7 +86,7 @@ def epochFifFiles(fifFileList,event_id=None, generate_controls_csv=None, tmin=-3
             if len(epochs) == 0:
                 print(f"Skipping (0 valid epochs): {patientID} - {fileName}")
                 continue
-            
+
             if resample_sfreq is not None:
                 epochs.resample(resample_sfreq)
 
@@ -143,6 +141,7 @@ def saveControlEpochs(file_name, filtered_fileList, timeMappingDF, events,
     session_df["start_td"] = pd.to_timedelta(session_df["time_of_day"])
     session_df["end_td"] = session_df["start_td"] + pd.to_timedelta(
         session_df["recording_duration_sec"].astype(float),unit="s")
+
     raw = mne.io.read_raw_fif(file_map[file_name], preload=False)
     # For each seizure event, compute clock time
     event_times_sec = events[:, 0] / raw.info["sfreq"]
