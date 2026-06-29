@@ -16,7 +16,7 @@ def visualizeRecordingTimeline(
     patient_ID=None,
     annotation_df=None,
     show=True,
-    figsize=(8, 1),
+    figsize=(12, 1),
     use_session_relative_time=False,):
     """
     Visualize EEG recording sessions from patient_time_mapping.csv.
@@ -168,6 +168,7 @@ def visualizeRecordingTimeline(
         for _, row in sub.iterrows():
 
             y = y_map[row["session_id"]]
+            s = row["session_id"]
 
             # event start (row-level)
             if use_session_relative_time:
@@ -352,7 +353,7 @@ def visualizeAnnotationTimeline(
     ax.set_yticks(list(y_map.values()))
     ax.set_yticklabels(files)
     ax.set_xlabel("Time (hours)")
-    ax.set_title("Recording + Annotation Timeline")
+    ax.set_title("Within-Recording Annotation Timeline for " + ", ".join(patient_ID))
     ax.grid(axis="x", linestyle="--", alpha=0.4)
 
     handles = [

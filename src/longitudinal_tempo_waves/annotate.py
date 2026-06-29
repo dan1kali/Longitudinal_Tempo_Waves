@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import unicodedata
@@ -6,9 +7,8 @@ from natsort import natsorted
 import pandas as pd
 import time
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 from project.helper import resolveSelection
+import project.config as config
 
 def compileAnnotationsFromFilelist(fifFileList, savePath=None):
     rows = []
@@ -48,10 +48,12 @@ def compileAnnotationsFromFilelist(fifFileList, savePath=None):
             combined_df.to_csv(savePath, index=False)
         else:
             raise ValueError("savePath must end with .parquet or .csv")
-        return combined_df
     
+    return combined_df
 
-def loadAnnotationsFromFile(filePath):
+
+
+def loadAnnotationsFromFile(filePath, patient_ID=None, filename_list=None):
 
     if filePath.endswith(".parquet"):
         df = pd.read_parquet(filePath)
@@ -59,6 +61,14 @@ def loadAnnotationsFromFile(filePath):
         df = pd.read_csv(filePath)
     else:
         raise ValueError("Unsupported file format")
+
+    all_patients = natsorted(df["patient"].unique())
+    patient_ID = resolveSelection(patient_ID, all_patients, "patient_ID")
+    df = df[df["patient"].isin(patient_ID)]
+
+    all_files = natsorted(df["filename"].unique())
+    filename_list = resolveSelection(filename_list, all_files, "filename")
+    df = df[df["filename"].isin(filename_list)]
 
     if "original_rec_time" in df.columns:
         df["original_rec_time"] = pd.to_datetime(df["original_rec_time"], errors="coerce")
@@ -71,110 +81,8 @@ def loadAnnotationsFromFile(filePath):
 
     return df
 
-def visualizeAnnotationTimeline(
-    parquet_path,
-    patient_ID=None,
-    filename_list=None,
-    figsize=(12, 1.2),
-    show=True
-):
-    df = pd.read_parquet(parquet_path)
 
-    # -----------------------
-    # UNIVERSES
-    # -----------------------
-    all_files = natsorted(df["filename"].unique())
-    all_patients = natsorted(df["patient"].unique())
-
-    # -----------------------
-    # RESOLVE INPUTS
-    # -----------------------
-    patient_ID = resolveSelection(patient_ID, all_patients, "patient_ID")
-    filename_list = resolveSelection(filename_list, all_files, "filename")
-
-    # -----------------------
-    # FILTER
-    # -----------------------
-    df = df[df["patient"].isin(patient_ID)]
-    df = df[df["filename"].isin(filename_list)]
-
-    files = natsorted(df["filename"].unique())
-
-    # -----------------------
-    # PLOT SETUP
-    # -----------------------
-    fig, ax = plt.subplots(
-        1, 1,
-        figsize=(figsize[0], max(figsize[1], 0.5 * len(files)))
-    )
-
-    y_map = {f: i for i, f in enumerate(files)}
-
-    ann_types = df["annotation"].astype(str).unique()
-    cmap = plt.cm.get_cmap("tab20", len(ann_types))
-    ann_color = {a: cmap(i) for i, a in enumerate(ann_types)}
-
-    # -----------------------
-    # PLOT
-    # -----------------------
-    for f in files:
-        sub = df[df["filename"] == f]
-        y = y_map[f]
-
-        rec_duration_hr = sub["recording_duration"].iloc[0] / 3600
-
-        ax.barh(
-            y=y,
-            left=0,
-            width=rec_duration_hr,
-            height=0.6,
-            color="lightblue",
-            alpha=0.3
-        )
-
-        for _, row in sub.iterrows():
-            x = row["onset"] / 3600
-            color = ann_color.get(row["annotation"], "black")
-
-            ax.scatter(x, y, color=color, s=20, zorder=3)
-
-            if pd.notna(row["event_duration"]) and row["event_duration"] > 0:
-                ax.hlines(
-                    y=y,
-                    xmin=x,
-                    xmax=(row["onset"] + row["event_duration"]) / 3600,
-                    color=color,
-                    linewidth=2,
-                    alpha=0.7
-                )
-
-    # -----------------------
-    # FORMATTING
-    # -----------------------
-    ax.set_yticks(list(y_map.values()))
-    ax.set_yticklabels(files)
-    ax.set_xlabel("Time (hours)")
-    ax.set_title("Recording + Annotation Timeline")
-    ax.grid(axis="x", linestyle="--", alpha=0.4)
-
-    handles = [
-        Line2D([0], [0], marker='o', color='w',
-               markerfacecolor=ann_color[a],
-               label=a, markersize=6)
-        for a in ann_types
-    ]
-
-    ax.legend(handles=handles, title="Annotations",
-              bbox_to_anchor=(1.02, 1), loc="upper left")
-
-    plt.tight_layout()
-
-    if show:
-        plt.show()
-
-    return df
-
-def cleanFifAnnotations(fifFileList, savePathList=None):
+def cleanFifAnnotationsUnicode(fifFileList, savePathList=None):
     """
     In-place cleaning of MNE FIF annotations:
     - removes control characters (\x00, etc.)
@@ -237,6 +145,192 @@ def cleanFifAnnotations(fifFileList, savePathList=None):
     return fifFileList
 
 
+
+def normalizeSyntax(label):
+    # ---- Unicode cleanup (optional but useful for accents consistency) ----
+    label = unicodedata.normalize("NFKC", label)
+
+    # ---------------- Strip whitespace ----------------
+    label = label.strip()
+
+    # ------------- Replace underscores/hyphens ----------------
+    label = label.replace("_", " ")
+    label = label.replace("-", " ")
+
+    # ---- Remove unwanted symbols (keep medically relevant punctuation) ----
+    label = re.sub(r"[$§@#&*~^`|\\]", "", label)
+
+    # ---------------- Collapse multiple spaces ----------------
+    label = re.sub(r"\s+", " ", label)
+
+    # ---------------- Collapse spaces before punctuation ----------------
+    label = re.sub(r"\s+([!?.,;:])", r"\1", label)
+
+    # ---------------- Fix repeated punctuation ----------------
+    label = re.sub(r"([!?.,;:+\-*/])\1+", r"\1", label)
+    label = re.sub(r"[!?]{2,}", lambda m: "?" if "?" in m.group(0) else "!", label)
+    
+    # ---------------- Lower case ----------------
+    label = label.lower()
+    
+    return label
+
+
+def normalizeSemantics(label):
+    return config.semantic_map.get(label, label)
+
+
+def generateAnnotationTable(annotationDF, output_csv=None,annotationTxt=None):
+    """
+    Generate editable annotation review table.
+
+    Parameters
+    ----------
+    annotationDF : pd.DataFrame
+        DataFrame containing an 'annotation' column.
+
+    output_csv : str
+        Path to save editable CSV table.
+
+    Returns
+    -------
+    review_df : pd.DataFrame
+    """
+
+    uniqueAnnotations = sorted(annotationDF["annotation"].dropna().unique())
+
+    rows = []
+
+    for old_label in uniqueAnnotations:
+
+        syntax_label = normalizeSyntax(old_label)
+        final_label = normalizeSemantics(syntax_label)
+
+        changed = old_label != final_label
+
+        if old_label == syntax_label and syntax_label == final_label:
+            source = "unchanged"
+        elif old_label != syntax_label and syntax_label == final_label:
+            source = "auto-syntax"
+        elif syntax_label != final_label:
+            source = "auto-semantic"
+        else:
+            source = "auto-mixed"
+
+        rows.append({
+            "old_label": old_label,
+            "final_label": final_label,
+            "changed": changed,
+            "source": source,})
+
+    review_df = pd.DataFrame(rows)
+
+    if output_csv:
+        review_df.to_csv(output_csv, index=False)
+
+        print(f"Saved annotation review table:\n{output_csv}")
+
+    if annotationTxt:
+
+        with open(annotationTxt, "w", encoding="utf-8") as f:
+            for ann in uniqueAnnotations:
+                f.write(str(ann) + "\n")
+                
+    collapse_count = len(uniqueAnnotations) - len(set(review_df["final_label"]))
+    print(f"Normalization collapsed {collapse_count} labels")
+
+    return review_df, collapse_count
+
+
+
+def loadEditedAnnotationTable(review_csv, overwrite_csv=True, save_json=False):
+    """
+    Reload manually edited annotation table and regenerate metadata.
+
+    Parameters
+    ----------
+    review_csv : str
+        Path to edited review CSV.
+
+    overwrite_csv : bool
+        If True, overwrite CSV with regenerated metadata.
+
+    Returns
+    -------
+    review_df : pd.DataFrame
+
+    renameDict : dict
+        Dictionary mapping old_label -> final_label
+    """
+
+    review_df = pd.read_csv(review_csv)
+    review_df = review_df[["old_label", "final_label"]].copy()
+
+    rows = []
+
+    for _, row in review_df.iterrows():
+
+        old_label = str(row["old_label"])
+        final_label = str(row["final_label"])
+
+        syntax_label = normalizeSyntax(old_label)
+
+        changed = old_label != final_label
+
+        if old_label == final_label:
+            source = "unchanged"
+
+        elif final_label == syntax_label:
+            source = "auto-syntax"
+
+        elif final_label == normalizeSemantics(syntax_label):
+            source = "auto-semantic"
+
+        else:
+            source = "manual"
+
+        rows.append({
+            "old_label": old_label,
+            "final_label": final_label,
+            "changed": changed,
+            "source": source,
+        })
+
+    updated_df = pd.DataFrame(rows)
+
+    if overwrite_csv:
+        updated_df.to_csv(review_csv, index=False)
+        print(f"Updated annotation table:\n{review_csv}")
+
+    renameDict = dict(zip(updated_df["old_label"], updated_df["final_label"],))
+
+    if save_json:
+
+        json_path = "/src/project/config.json"
+        renameConfig = {"rename_dict": renameDict}
+        with open(json_path, "w") as f:
+            json.dump(renameConfig, f, indent=2)
+        print(f"Saved rename dictionary:\n{json_path}")
+
+        # code to reload from json:
+        # ---------------- Load rename dictionary from .json -------------------
+        # config_path = "/src/project/config.json"
+        # with open(config_path, "r") as f:
+        #     config = json.load(f)
+        # renameDict = config["rename_dict"]
+
+    n_before = len(set(review_df["old_label"]))
+    n_after = len(set(review_df["final_label"]))
+
+    n_manual_collapse = n_before - n_after
+
+    print(f"Manual editing collapsed {n_manual_collapse} labels")
+
+    return updated_df, renameDict, n_manual_collapse
+
+
+
+
 def relabelFifAnnotations(fifFileList, renameDict, overwrite=False):
     """
     Rewrites MNE annotations in FIF files using renameDict and saves
@@ -256,6 +350,9 @@ def relabelFifAnnotations(fifFileList, renameDict, overwrite=False):
     if not isinstance(fifFileList, list):
         fifFileList = [fifFileList]
 
+    processed_patients = set()
+    output_root = None  # <-- track global output root
+
     for file in fifFileList:
         file_start = time.time()
         fileName = os.path.splitext(os.path.basename(file))[0]
@@ -268,24 +365,39 @@ def relabelFifAnnotations(fifFileList, renameDict, overwrite=False):
                 print("Skipping (no annotations)")
                 continue
 
-            raw.annotations.rename(renameDict)
+            present = set(raw.annotations.description)
+
+            rename_dict_this_file = {
+                old: new
+                for old, new in renameDict.items()
+                if old in present
+            }
+
+            raw.annotations.rename(rename_dict_this_file)
 
             # Save relabeled file in a mirrored directory structure
             if overwrite:
                 save_path = file
             else:
                 parts = file.split(os.sep)
-                save_path = os.sep.join(["fif_relabeled" if p == "fif" else p for p in parts])
+                save_path = os.sep.join(["fif_relabeled_syntax" if "fif" in p and not p.endswith(".fif") else p for p in parts])
                 if os.path.exists(save_path):
                     print(f"Skipping (already relabeled): {patientID} - {fileName}")
                     continue
                 else:
                     os.makedirs(os.path.dirname(save_path), exist_ok=True)
             
+            # capture root output directory once
+            if output_root is None:
+                output_root = os.path.dirname(os.path.dirname(save_path))
+
             raw.save(save_path, overwrite=True)
+            processed_patients.add(patientID)
+
             print(f"Relabeled {patientID} - {fileName} annotations in {time.time() - file_start:.1f} seconds")
 
         except Exception as exc:
             print(f"Skipped {patientID} - {fileName}: {exc}")
 
-    print(f"\nTotal processing time: {time.time() - total_start:.1f} seconds")
+    print(f"Relabeled {len(processed_patients)} patients to {output_root}")
+    print(f"Total processing time: {time.time() - total_start:.1f} seconds")
