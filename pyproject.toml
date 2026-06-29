@@ -23,6 +23,7 @@ dependencies = [
     "statsmodels>=0.14.6",
 ]
 
+
 [project.scripts]
 longitudinal-tempo-waves = "longitudinal_tempo_waves:main"
 
