@@ -73,6 +73,7 @@ annotationDF = loadAnnotationsFromFile(filePath=allAnnotCsvPath, patient_ID=None
 annotationTxt = os.path.join(BasePath, "annotations_unique.txt")
 annotationTableCsv = os.path.join(BasePath, "annotations_table.csv")
 
+
 # ------------------------------------------------------------- 
 # IF AUTOMATICALLY EDIT: 
 #   
@@ -82,6 +83,7 @@ annotationTableCsv = os.path.join(BasePath, "annotations_table.csv")
 # Then run:
 review_df, collapse_count = generateAnnotationTable(annotationDF, output_csv=None, annotationTxt=None)
 # -------------------------------------------------------------
+
 
 # Examine all changed labels:
 # print(review_df[review_df["changed"]])
@@ -102,9 +104,7 @@ review_df, collapse_count = generateAnnotationTable(annotationDF, output_csv=Non
 # print("Count:", len(subset))
 # print("Old Labels:\n",subset["old_label"].to_string(index=False))
 
-
-
-# Save to csv:
+# optional: generate .csv of changed labels and save to changed_labels.csv:
 df = review_df.copy()
 summary = (df.groupby("final_label")
             .agg(status=("changed", lambda x: "changed" if x.any() else "unchanged"),
