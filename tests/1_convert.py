@@ -8,7 +8,7 @@ import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 mne.set_log_level("ERROR")
 
-BasePath = config.raw_dir
+BasePath = config.base_output_dir
 
 # %%
 

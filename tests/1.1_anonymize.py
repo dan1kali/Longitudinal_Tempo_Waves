@@ -1,10 +1,28 @@
-from longitudinal_tempo_waves.visualize import visualizeAnnotationTimeline, visualizeRecordingTimeline
-import os
+# %%
 import pandas as pd
+from longitudinal_tempo_waves.annotate import loadAnnotationsFromFile
+from longitudinal_tempo_waves.visualize import visualizeAnnotationTimeline, visualizeRecordingTimeline
+
 import project.config as config
+import os
+from longitudinal_tempo_waves.initialize import ObtainEEGFilePaths
+from longitudinal_tempo_waves.anonymize import exportTimeMapping, anonymizeFifFiles
 
 BasePath = config.base_output_dir
-timeMappingCsv = os.path.join(BasePath, "patientTimeMapping.csv")
+
+# %%
+
+# ######################################################################
+# ######################### Save time mapping ##########################
+# ######################################################################
+
+# # ----------------- Specify files and obtain filepaths -----------------
+fifFolder_preAnon = os.path.join(BasePath, 'fif_rmchans_NOT_anon')
+fifFileList_toAnonymize, _, _ = ObtainEEGFilePaths(fifFolder_preAnon, patient_index=None, file_index=None)
+outputCsv = os.path.join(BasePath, "patientTimeMapping.csv")
+
+# # ------------------- Export time mapping metadata ---------------------
+# exportTimeMapping(fifFileList_toAnonymize, outputCsv)
 
 
 # %%
@@ -32,17 +50,6 @@ maybe = ['PAT_1066', 'PAT_1117', 'PAT_1120', 'PAT_1135', 'PAT_1154', 'PAT_1179',
 
 throw_out = ['PAT_1104', 'PAT_1124', 'PAT_827', 'PAT_829'] # 5
 
-# good: 
-# 1200 session 2
-# 867 session 1 
-# 972 session 1 
-# 990 session 1 
-
-# very long: 
-# 870 session 2 
-# 888 session 2 
-
-# bad:PAT_626
 # -------------- Crisis rows ----------------
 
 allAnnotCsvPath = os.path.join(BasePath, "all_annotations.csv")
@@ -65,16 +72,23 @@ start = (batch_idx - 1) * batch_size
 end = start + batch_size
 
 patients = sorted(annot_rows["patient"].unique().tolist())[start:end]
-# print(f"# Patients with crisis annotations: {len(patients)}") - 185
 
-# patients=[1,2,3,4,6,9,42]
-
-select = better[2]
+select = best[4]
 print(select)
 
-
-# ----- visualize using one of following functions: -----
-
 # visualizeAnnotationTimeline(file_path=crisepath, patient_ID=select, filename_list=None)
-visualizeRecordingTimeline(timeMappingCsv, patient_ID=best[1:9], annotation_df=annot_rows, show=True)
+visualizeRecordingTimeline(outputCsv, patient_ID=throw_out[0:4], annotation_df=annot_rows, show=True)
 
+
+# %%
+
+#######################################################################
+############################ Bulk anonymize ###########################
+#######################################################################
+
+# # ----------------- Specify folder to load files from -----------------
+# fifFolder_preAnon = os.path.join(BasePath, 'fif_rmchans_NOT_anon')
+# fifFileList_toAnonymize, _ = ObtainEEGFilePaths(fifFolder_preAnon, patient_index=None, file_index=None)
+
+# # ------------------------ Anonymize files ----------------------------
+# anonymizeFifFiles(fifFileList_toAnonymize, overwrite=False)

@@ -11,7 +11,7 @@ import project.config as config
 ######################### Figures: Time Mapping ##########################
 ##########################################################################
 
-BasePath = config.raw_dir
+BasePath = config.base_output_dir
 outputCsv = os.path.join(BasePath, "patientTimeMapping.csv")
 
 df = pd.read_csv(outputCsv)

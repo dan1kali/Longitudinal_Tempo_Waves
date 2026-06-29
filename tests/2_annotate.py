@@ -6,7 +6,7 @@ from longitudinal_tempo_waves.annotate import cleanFifAnnotationsUnicode, compil
 from longitudinal_tempo_waves.visualize import visualizeAnnotationTimeline
 import pandas as pd
 
-BasePath = config.raw_dir
+BasePath = config.base_output_dir
 
 # %%
 

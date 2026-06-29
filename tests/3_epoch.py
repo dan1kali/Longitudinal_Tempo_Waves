@@ -9,7 +9,7 @@ from pathlib import Path
 
 mne.set_log_level("WARNING")
 
-BasePath = config.raw_dir
+BasePath = config.base_output_dir
 
 ########################################################################
 ########################## Visual inspection ###########################
