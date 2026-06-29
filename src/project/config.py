@@ -2,6 +2,8 @@ import os
 
 # Directories
 base_output_dir = 'insert_here'
+# base_output_dir = '/Volumes/duguelab_general/DugueLab_Research/Current_Projects/DL_Long_Tempo_Waves/Experiments/Experiment/Data'
+# base_output_dir = '/Users/macbook/Work/DugueLab/Longitudinal_Tempo_Waves/Data/long_duration'
 
 raw_dir = os.path.join(base_output_dir, 'raw')
 trc_raw_dir = os.path.join(raw_dir, 'trc')
