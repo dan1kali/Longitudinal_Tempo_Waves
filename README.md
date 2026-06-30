@@ -1,7 +1,6 @@
 # Longitudinal Tempo Waves
 
 Simple package to analyze travelling waves in longitudinal epilepsy EEG data.
-Managed with `uv`.
 
 ## Setup
 
