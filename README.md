@@ -72,6 +72,10 @@ Visually inspect files (red dot indicates "crise" annotation) using:
 1. `visualizeRecordingTimeline()` to see how files are spread throughout time within ~5-day sessions. Specify multiple patients, up to ~9 depending on size of computer screen is recommended, or
 2. `visualizeAnnotationTimeline()` to see how annotations are distributed within a single patient and their files.
 
+##### Example visualizations
+![Display timeline of recordings](docs/ex1.png)
+![Display annotations per recording for individual patient](docs/ex2.png)
+
 ### `3_epoch.py`
 
 - Generate epochs around seizure events labeled with "crise", and control epochs. Best to first visually examine files and generate a list of specific patients to generate epochs for by specifying best patients or files to examine.
