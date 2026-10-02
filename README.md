@@ -75,7 +75,7 @@ Visually inspect files (red dot indicates "crise" annotation) using:
 ##### Example visualizations
 
 <p align="center">
-  <img src="docs/ex1.png" alt="Display timeline of recordings" width="45%">
+  <img src="docs/ex1.png" alt="Display timeline of recordings" width="42.5%">
   <img src="docs/ex2.png" alt="Display annotations per recording for individual patient" width="40%">
 </p>
 
