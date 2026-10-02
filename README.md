@@ -73,8 +73,11 @@ Visually inspect files (red dot indicates "crise" annotation) using:
 2. `visualizeAnnotationTimeline()` to see how annotations are distributed within a single patient and their files.
 
 ##### Example visualizations
-![Display timeline of recordings](docs/ex1.png)
-![Display annotations per recording for individual patient](docs/ex2.png)
+
+<p align="center">
+  <img src="docs/ex1.png" alt="Display timeline of recordings" width="40%">
+  <img src="docs/ex2.png" alt="Display annotations per recording for individual patient" width="40%">
+</p>
 
 ### `3_epoch.py`
 
